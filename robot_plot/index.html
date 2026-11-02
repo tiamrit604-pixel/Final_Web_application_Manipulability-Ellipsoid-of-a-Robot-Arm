@@ -1,0 +1,42 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}
+#chart{width:100%;height:100%}
+</style><script src="plotly.min.js"></script></head>
+<body><div id="chart"></div><script>
+const chart=document.getElementById('chart');
+let savedCamera=null, rendering=false, initialized=false, lastFigure='', pending=null;
+const clone=o=>JSON.parse(JSON.stringify(o));
+function send(type,data={}){parent.postMessage({isStreamlitMessage:true,type,...data},'*');}
+function cameraFromPlot(){try{return clone(chart._fullLayout.scene.camera)}catch(e){return null}}
+function emitCamera(){
+  if(rendering)return;
+  const cam=cameraFromPlot(); if(!cam)return;
+  if(JSON.stringify(cam)===JSON.stringify(savedCamera))return;
+  savedCamera=cam;
+  send('streamlit:setComponentValue',{value:{camera:cam},dataType:'json'});
+}
+chart.on && chart.on('plotly_relayout',()=>{});
+async function render(args){
+  const json=args.figure;
+  if(!json || json===lastFigure)return;
+  lastFigure=json;
+  const fig=JSON.parse(json);
+  if(savedCamera){fig.layout.scene=fig.layout.scene||{};fig.layout.scene.camera=clone(savedCamera);}
+  else if(args.camera){savedCamera=clone(args.camera);fig.layout.scene=fig.layout.scene||{};fig.layout.scene.camera=clone(savedCamera);}
+  rendering=true;
+  const config={responsive:true,scrollZoom:true,displaylogo:false,modeBarButtonsToRemove:['resetCameraDefault3d']};
+  try{
+    if(!initialized){await Plotly.newPlot(chart,fig.data,fig.layout,config);initialized=true;
+      chart.on('plotly_relayout',()=>{clearTimeout(pending);pending=setTimeout(emitCamera,120)});
+    }else{await Plotly.react(chart,fig.data,fig.layout,config);}
+  }finally{rendering=false;}
+  send('streamlit:setFrameHeight',{height:650});
+}
+window.addEventListener('message',e=>{
+ if(e.data?.type==='streamlit:render')render(e.data.args||{}).catch(console.error);
+});
+window.addEventListener('resize',()=>{if(initialized)Plotly.Plots.resize(chart)});
+send('streamlit:componentReady',{apiVersion:1});
+send('streamlit:setFrameHeight',{height:650});
+</script></body></html>
