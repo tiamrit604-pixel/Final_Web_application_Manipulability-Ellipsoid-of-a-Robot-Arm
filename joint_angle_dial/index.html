@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#333;color-scheme:light dark}
+body{margin:0;overflow:hidden;background:transparent} .wrap{display:flex;flex-direction:column;align-items:center}
+svg{width:228px;height:228px;touch-action:none;cursor:grab;user-select:none}
+svg:active{cursor:grabbing} .hint{font-size:11px;opacity:.7;margin-top:0}
+text{fill:currentColor;font-size:10px;pointer-events:none}.value{font-size:16px;font-weight:650}
+.track{fill:none;stroke:currentColor;stroke-opacity:.16;stroke-width:2}
+.tick{stroke:currentColor;stroke-opacity:.5;stroke-width:1.5}
+.pointer{stroke:#0d9488;stroke-width:5;stroke-linecap:round}
+.knob{fill:#0d9488;stroke:#fff;stroke-width:2}
+</style></head><body><div class="wrap"><svg id="dial" viewBox="0 0 240 240" role="slider" tabindex="0" aria-label="Joint angle circular dial" aria-valuemin="-180" aria-valuemax="180"></svg>
+<script>
+const svg=document.getElementById('dial');
+let angle=45,unit='deg',dragging=false,seq=0;
+const ns='http://www.w3.org/2000/svg';
+function el(tag,attrs={},content=''){let x=document.createElementNS(ns,tag);for(let [k,v] of Object.entries(attrs))x.setAttribute(k,v);if(content)x.textContent=content;svg.appendChild(x);return x;}
+const rad=d=>d*Math.PI/180;
+const labels=['0','π/6','π/3','π/2','2π/3','5π/6','π','−5π/6','−2π/3','−π/2','−π/3','−π/6'];
+function draw(){svg.replaceChildren();el('circle',{cx:120,cy:120,r:97,class:'track'});
+for(let i=0;i<12;i++){let a=rad(i*30-90),deg=i*30>180?i*30-360:i*30;
+el('line',{x1:120+86*Math.cos(a),y1:120+86*Math.sin(a),x2:120+98*Math.cos(a),y2:120+98*Math.sin(a),class:'tick'});
+el('text',{x:120+70*Math.cos(a),y:124+70*Math.sin(a),'text-anchor':'middle'},unit==='deg'?deg+'°':labels[i]);}
+let a=rad(angle-90);el('line',{x1:120,y1:120,x2:120+56*Math.cos(a),y2:120+56*Math.sin(a),class:'pointer'});
+el('circle',{cx:120,cy:120,r:7,fill:'#0d9488'});el('circle',{cx:120+56*Math.cos(a),cy:120+56*Math.sin(a),r:7,class:'knob'});
+el('text',{x:120,y:158,'text-anchor':'middle',class:'value'},unit==='deg'?Math.round(angle)+'°':(rad(angle)).toFixed(3)+' rad');
+svg.setAttribute('aria-valuenow',angle.toFixed(2));}
+function post(type,data){window.parent.postMessage(Object.assign({isStreamlitMessage:true,type:type},data||{}),'*');}
+function send(){seq++;post('streamlit:setComponentValue',{value:{angle:angle,seq:Date.now()*1000+seq},dataType:'json'});}
+function update(e){const r=svg.getBoundingClientRect(),x=(e.clientX-r.left)*240/r.width-120,y=(e.clientY-r.top)*240/r.height-120;
+let a=Math.atan2(y,x)*180/Math.PI+90;if(a>180)a-=360;if(a< -180)a+=360;
+angle=unit==='deg'?Math.round(a):Math.round(rad(a)*1000)/1000*180/Math.PI;
+angle=Math.max(-180,Math.min(180,angle));draw();}
+svg.addEventListener('pointerdown',e=>{dragging=true;svg.setPointerCapture(e.pointerId);update(e)});
+svg.addEventListener('pointermove',e=>{if(dragging)update(e)});
+svg.addEventListener('pointerup',e=>{if(dragging){update(e);dragging=false;send()}});
+svg.addEventListener('pointercancel',()=>{dragging=false});
+svg.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key==='ArrowUp'||e.key==='ArrowLeft'||e.key==='ArrowDown'){
+e.preventDefault();angle=Math.max(-180,Math.min(180,angle+((e.key==='ArrowRight'||e.key==='ArrowUp')?1:-1)));draw();send();}});
+window.addEventListener('message',e=>{if(e.data?.type==='streamlit:render'){
+let args=e.data.args||{};unit=args.unit||'deg';if(!dragging && typeof args.angle==='number')angle=args.angle;draw();post('streamlit:setFrameHeight',{height:255});}});
+post('streamlit:componentReady',{apiVersion:1});draw();post('streamlit:setFrameHeight',{height:255});
+</script></body></html>
